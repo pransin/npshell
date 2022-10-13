@@ -48,24 +48,29 @@ typedef struct Pipeline
 } Pipeline;
 
 void error_exit(char *msg)
+
 {
     perror(msg);
     exit(EXIT_FAILURE);
 }
 
 void change_dir(char **args)
+
 {
     if (args[1] == NULL)
+
     {
         perror("Expected argument to \"cd\"\n");
     }
     else if (chdir(args[1]) != 0)
+
     {
         perror("chdir");
     }
 }
 
 void free_pipeline(Pipeline *pipeline)
+
 {
     Command *tmp;
     if (!pipeline)
@@ -91,6 +96,7 @@ void close_all_pipes(int pipe_fd[][2], int count)
 }
 
 bool is_valid_filename(char *filename)
+
 {
     int len = strlen(filename);
     for (int i = 0; i < len; i++)
@@ -103,21 +109,23 @@ bool is_valid_filename(char *filename)
     return true;
 }
 
-void execute(Pipeline *pipeline, bool *exit)
+void execute(Pipeline *pipeline)
 {
+
     if (!(pipeline->cnt))
     {
         return;
     }
     if (!strcmp(pipeline->cmd_list->next->argv[0], "cd"))
+
     {
         change_dir(pipeline->cmd_list->next->argv);
         return;
     }
     if (!strcmp(pipeline->cmd_list->next->argv[0], "exit"))
+
     {
-        *exit = true;
-        return;
+        exit(EXIT_SUCCESS);
     }
     int count = pipeline->cnt;
     int pipe_fd[count - 1][2];
@@ -129,8 +137,13 @@ void execute(Pipeline *pipeline, bool *exit)
         }
     }
     Command *cmd = pipeline->cmd_list->next;
+    int pipe_index = -1;
     for (int i = 0; i < count; i++)
     {
+        if (cmd->out_count > 0)
+        {
+            pipe_index++;
+        }
         pid_t ret = fork();
         if (ret == -1)
         {
@@ -179,10 +192,6 @@ void execute(Pipeline *pipeline, bool *exit)
                     {
                         error_exit("write");
                     }
-                    if (write(pipe_fd[i][1], data, position) == -1)
-                    {
-                        error_exit("write");
-                    }
                     close(temp_fd[1]);
                     if (dup2(temp_fd[0], STDIN_FILENO) == -1)
                     {
@@ -198,65 +207,81 @@ void execute(Pipeline *pipeline, bool *exit)
                 }
             }
             if (i != 0)
+
             {
                 if (i == count - 1 || cmd->out_count > 0)
+
                 {
                     if (dup2(pipe_fd[i - 1][0], STDIN_FILENO) == -1)
+
                     {
                         error_exit("dup2");
                     }
                 }
             }
             if (cmd->input_redirect == true && is_valid_filename(cmd->input_file))
+
             {
                 int input_fd = open(cmd->input_file, O_RDONLY);
                 if (input_fd == -1)
+
                 {
                     error_exit("open");
                 }
                 if (dup2(input_fd, STDIN_FILENO) == -1)
+
                 {
                     error_exit("dup2");
                 }
                 if (close(input_fd) == -1)
+
                 {
                     error_exit("close");
                 }
             }
             if (cmd->output_redirect == true && is_valid_filename(cmd->output_file))
+
             {
                 int output_fd = open(cmd->output_file, O_TRUNC | O_WRONLY | O_CREAT, 0777);
                 if (output_fd == -1)
+
                 {
                     error_exit("open");
                 }
                 if (dup2(output_fd, STDOUT_FILENO) == -1)
+
                 {
                     error_exit("dup2");
                 }
                 if (close(output_fd) == -1)
+
                 {
                     error_exit("close");
                 }
             }
             if (cmd->output_append == true && is_valid_filename(cmd->output_file))
+
             {
                 int output_fd = open(cmd->output_file, O_APPEND | O_WRONLY | O_CREAT, 0777);
                 if (output_fd == -1)
+
                 {
                     error_exit("open");
                 }
                 if (dup2(output_fd, STDOUT_FILENO) == -1)
+
                 {
                     error_exit("dup2");
                 }
                 if (close(output_fd) == -1)
+
                 {
                     error_exit("close");
                 }
             }
             close_all_pipes(pipe_fd, count - 1);
             if (execvp(cmd->argv[0], cmd->argv) == -1)
+
             {
                 error_exit("execvp");
             }
@@ -268,11 +293,13 @@ void execute(Pipeline *pipeline, bool *exit)
                 close(pipe_fd[i - 1][0]);
             }
             if (i < count - 1)
+
             {
                 close(pipe_fd[i][1]);
             }
             int status;
             if (wait(&status) == -1)
+
             {
                 error_exit("wait");
             }
@@ -389,15 +416,11 @@ char *read_cmds()
     char *commands = NULL;
     size_t size = 0;
     ssize_t result = getline(&commands, &size, stdin);
-    if (result == 1)
-    {
-        return NULL;
-    }
     if (result == -1)
     {
         free(commands);
         commands = NULL;
-        error_exit("Unable to read input");
+        error_exit("read_cmd");
     }
     return commands;
 }
@@ -405,6 +428,13 @@ char *read_cmds()
 char *tokeniser(char **input, int *out_count)
 {
     *out_count = 0;
+    if (*input == NULL)
+        return NULL;
+
+    // Remove leading whitespaces
+    while (**input != '\0' && isspace(**input))
+        (*input)++;
+
     if (*input == NULL || **input == '\0')
     {
         return NULL;
@@ -450,7 +480,7 @@ void insert_cmd(Pipeline *pipeline, Command *cmd)
 void populate_pipeline(char *input, Pipeline *pipeline)
 {
     int delim_count = 0;
-    char *token = tokeniser(&input, &delim_count);
+    char *token = tokeniser(&input, &delim_count); // Split on pipe and comma
     while (token != NULL)
     {
         // Command struct initialization
@@ -482,14 +512,14 @@ Pipeline *create_pipeline(char *input)
 
 int main()
 {
-    bool exit = false;
-    while (!exit)
+    while (1)
     {
         printf(GREEN "=> " RESET);
+        fflush(stdout);
         char *input = read_cmds();
         Pipeline *pipeline = create_pipeline(input);
-        execute(pipeline, &exit);
-        free_pipeline(pipeline);
+        execute(pipeline);
+        // free_pipeline(pipeline);
         printf("\n");
     }
 }
