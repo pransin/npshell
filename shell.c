@@ -10,6 +10,7 @@
 #include <wait.h>
 
 #define BUFFER_SIZE 1024
+#define MAX_CMD_SIZE 1024
 #define DEFAULT_MALLOC_SIZE 4
 #define GREEN "\033[0;32m"
 #define RESET "\033[0;37m"
@@ -47,11 +48,72 @@ typedef struct Pipeline
 
 } Pipeline;
 
-void error_exit(char *msg)
+typedef struct HistoryNode
+{
+    char input[MAX_CMD_SIZE];
+    struct HistoryNode *next;
+    struct HistoryNode *prev;
+} HistoryNode;
 
+typedef struct History
+{
+    HistoryNode *head;
+    HistoryNode *tail;
+} History;
+
+History *ptr = NULL;
+
+void error_exit(char *msg)
 {
     perror(msg);
     exit(EXIT_FAILURE);
+}
+
+void insert_input_in_history(char *input)
+{
+    if (input == NULL || *input == '\0' || *input == '\n' || strlen(input) == 0)
+    {
+        return;
+    }
+    HistoryNode *hn = (HistoryNode *)malloc(sizeof(HistoryNode));
+    if (hn == NULL)
+    {
+        error_exit("malloc");
+    }
+    strcpy(hn->input, input);
+    if (ptr->head == NULL)
+    {
+        ptr->head = hn;
+        hn->prev = NULL;
+        hn->next = NULL;
+        ptr->tail = hn;
+    }
+    else
+    {
+        hn->next = ptr->head;
+        hn->prev = NULL;
+        ptr->head->prev = hn;
+        ptr->head = hn;
+    }
+}
+
+void pop()
+{
+    if (ptr->head == NULL)
+    {
+        return;
+    }
+    if (ptr->head->next == NULL)
+    {
+        free(ptr->head);
+        return;
+    }
+    HistoryNode *hn = ptr->head;
+    ptr->head = hn->next;
+    ptr->head->prev = NULL;
+    hn->prev = NULL;
+    hn->next = NULL;
+    free(hn);
 }
 
 void change_dir(char **args)
@@ -117,13 +179,22 @@ void execute(Pipeline *pipeline)
         return;
     }
     if (!strcmp(pipeline->cmd_list->next->argv[0], "cd"))
-
     {
         change_dir(pipeline->cmd_list->next->argv);
         return;
     }
+    if (!strcmp(pipeline->cmd_list->next->argv[0], "history"))
+    {
+        pop();
+        HistoryNode *hn = ptr->head;
+        while (hn != NULL)
+        {
+            printf("%s\n", hn->input);
+            hn = hn->next;
+        }
+        return;
+    }
     if (!strcmp(pipeline->cmd_list->next->argv[0], "exit"))
-
     {
         exit(EXIT_SUCCESS);
     }
@@ -515,11 +586,19 @@ Pipeline *create_pipeline(char *input)
 
 int main()
 {
+    ptr = (History *)malloc(sizeof(History));
+    if (ptr == NULL)
+    {
+        error_exit("malloc");
+    }
+    ptr->head = NULL;
+    ptr->tail = NULL;
     while (1)
     {
         printf(GREEN "=> " RESET);
         fflush(stdout);
         char *input = read_cmds();
+        insert_input_in_history(input);
         Pipeline *pipeline = create_pipeline(input);
         execute(pipeline);
         free_pipeline(pipeline);
