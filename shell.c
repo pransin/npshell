@@ -103,12 +103,12 @@ bool is_valid_filename(char *filename)
     int len = strlen(filename);
     for (int i = 0; i < len; i++)
     {
-        if (isdigit(filename[i]))
+        if (isalpha(filename[i]))
         {
-            return false;
+            return true;
         }
     }
-    return true;
+    return false;
 }
 
 void execute(Pipeline *pipeline)
