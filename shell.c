@@ -184,15 +184,18 @@ void execute(Pipeline *pipeline)
                     {
                         error_exit("pipe");
                     }
-                    // if (write(temp_fd[0], data, position) == -1)
-                    // {
-                    //     error_exit("write");
-                    // }
                     if (write(temp_fd[1], data, position) == -1)
                     {
                         error_exit("write");
                     }
-                    close(temp_fd[1]);
+                    if (write(pipe_fd[i][1], data, position) == -1)
+                    {
+                        error_exit("write");
+                    }
+                    if (close(temp_fd[1]) == -1)
+                    {
+                        error_exit("close");
+                    }
                     if (dup2(temp_fd[0], STDIN_FILENO) == -1)
                     {
                         error_exit("dup2");
@@ -519,7 +522,7 @@ int main()
         char *input = read_cmds();
         Pipeline *pipeline = create_pipeline(input);
         execute(pipeline);
-        // free_pipeline(pipeline);
+        free_pipeline(pipeline);
         printf("\n");
     }
 }
