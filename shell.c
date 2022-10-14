@@ -12,7 +12,9 @@
 #define BUFFER_SIZE 1024
 #define DEFAULT_MALLOC_SIZE 4
 #define GREEN "\033[0;32m"
+#define BOLD_GREEN "\033[1;32m"
 #define RESET "\033[0;37m"
+#define PATH_MAX 4096
 
 enum ParseMode
 {
@@ -284,7 +286,6 @@ void execute(Pipeline *pipeline)
             }
             close_all_pipes(pipe_fd, count - 1);
             if (execvp(cmd->argv[0], cmd->argv) == -1)
-
             {
                 error_exit("execvp");
             }
@@ -515,9 +516,12 @@ Pipeline *create_pipeline(char *input)
 
 int main()
 {
+    char cwd[PATH_MAX];
     while (1)
     {
-        printf(GREEN "=> " RESET);
+        if (getcwd(cwd, PATH_MAX) != NULL)
+            printf("%s %s", BOLD_GREEN, cwd);
+        printf(GREEN ":=> " RESET);
         fflush(stdout);
         char *input = read_cmds();
         Pipeline *pipeline = create_pipeline(input);
