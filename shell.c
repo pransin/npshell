@@ -191,7 +191,7 @@ void execute(Pipeline *pipeline)
         HistoryNode *hn = ptr->head;
         while (hn != NULL)
         {
-            printf("%s\n", hn->input);
+            printf("%s", hn->input);
             hn = hn->next;
         }
         return;
@@ -606,6 +606,5 @@ int main()
         Pipeline *pipeline = create_pipeline(input);
         execute(pipeline);
         free_pipeline(pipeline);
-        printf("\n");
     }
 }
