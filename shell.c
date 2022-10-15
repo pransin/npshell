@@ -1,3 +1,12 @@
+#define _XOPEN_SOURCE 700 // For sigaction
+#define BUFFER_SIZE 1024
+#define MAX_CMD_SIZE 1024
+#define DEFAULT_MALLOC_SIZE 4
+#define GREEN "\033[0;32m"
+#define BOLD_GREEN "\033[1;32m"
+#define RESET "\033[0;37m"
+#define PATH_MAX 4096
+
 #include <stdio.h>
 #include <stdbool.h>
 #include <stdlib.h>
@@ -8,14 +17,8 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <wait.h>
-
-#define BUFFER_SIZE 1024
-#define MAX_CMD_SIZE 1024
-#define DEFAULT_MALLOC_SIZE 4
-#define GREEN "\033[0;32m"
-#define BOLD_GREEN "\033[1;32m"
-#define RESET "\033[0;37m"
-#define PATH_MAX 4096
+#include <signal.h>
+#include <setjmp.h>
 
 enum ParseMode
 {
@@ -64,6 +67,29 @@ typedef struct History
 } History;
 
 History *ptr = NULL;
+pid_t gpid; // To identify if the process is parent or child
+static sigjmp_buf senv;
+void int_handler(int signo)
+{
+    if (gpid == getpid()) // For parent
+    {
+        siglongjmp(senv, 1);
+    }
+    else // For child
+    {
+        exit(130); // usual exit code for SIGINT
+    }
+}
+
+void unignore_int()
+{
+    signal(SIGINT, int_handler);
+}
+
+void ignore_int()
+{
+    signal(SIGINT, SIG_IGN);
+}
 
 void error_exit(char *msg)
 {
@@ -116,6 +142,7 @@ void pop()
     hn->prev = NULL;
     hn->next = NULL;
     free(hn);
+    hn = NULL;
 }
 
 void change_dir(char **args)
@@ -175,7 +202,6 @@ bool is_valid_filename(char *filename)
 
 void execute(Pipeline *pipeline)
 {
-
     if (!(pipeline->cnt))
     {
         return;
@@ -224,6 +250,7 @@ void execute(Pipeline *pipeline)
         }
         if (ret == 0)
         {
+            signal(SIGINT, SIG_DFL);
             if (i < count - 1)
             {
                 if (cmd->out_count == 0 && count != 1)
@@ -411,7 +438,9 @@ void parse_cmd(Command *cmd, char *token)
     int argc = 0;
     int len = strlen(token);
     cmd->argv = malloc(DEFAULT_MALLOC_SIZE * sizeof(char *));
-    // cmd->argv[0] = token;
+    if (!cmd->argv)
+        error_exit("malloc");
+    int argmax = DEFAULT_MALLOC_SIZE;
     enum ParseMode mode = COMMAND_BEGIN;
     for (int i = 0; i < len; i++)
     {
@@ -472,6 +501,14 @@ void parse_cmd(Command *cmd, char *token)
             case ARGS_BEGIN:
                 cmd->argv[argc++] = (token + i);
                 mode = ARGS_READ;
+                if (argc == argmax)
+                {
+                    argmax = (argmax * 3) / 2;
+                    cmd->argv = realloc(cmd->argv, argmax * sizeof(char *));
+                    if (!cmd->argv)
+                        error_exit("realloc");
+                }
+
                 break;
             case COMMAND_BEGIN:
                 cmd->argv[0] = (token + i);
@@ -484,6 +521,7 @@ void parse_cmd(Command *cmd, char *token)
     }
 
     cmd->argc = argc;
+    cmd->argv[argc] = NULL;
 }
 
 char *read_cmds()
@@ -592,9 +630,13 @@ int main()
     {
         error_exit("malloc");
     }
+
+    gpid = getpid();
     ptr->head = NULL;
     ptr->tail = NULL;
     char cwd[PATH_MAX];
+    struct sigaction act;
+    ignore_int();
     while (1)
     {
         if (getcwd(cwd, PATH_MAX) != NULL)
@@ -603,8 +645,15 @@ int main()
         fflush(stdout);
         char *input = read_cmds();
         insert_input_in_history(input);
-        Pipeline *pipeline = create_pipeline(input);
+        Pipeline *pipeline = NULL;
+
+        unignore_int();
+        if (sigsetjmp(senv, 1) == 0)
+            pipeline = create_pipeline(input);
+        ignore_int();
+
         execute(pipeline);
         free_pipeline(pipeline);
+        free(input);
     }
 }
