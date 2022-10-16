@@ -1,4 +1,4 @@
-#define _XOPEN_SOURCE 700 // For sigaction
+#define _XOPEN_SOURCE 700 // Enables vs code to see sigjmp_buf, not sure why
 #define BUFFER_SIZE 1024
 #define MAX_CMD_SIZE 1024
 #define DEFAULT_MALLOC_SIZE 4
@@ -170,6 +170,9 @@ void free_pipeline(Pipeline *pipeline)
     }
     for (tmp = pipeline->cmd_list->next; tmp != NULL; tmp = tmp->next)
     {
+        free(tmp->input_file);
+        free(tmp->output_file);
+        free(tmp->argv);
         free(tmp);
     }
     pipeline->last = pipeline->cmd_list;
@@ -635,7 +638,6 @@ int main()
     ptr->head = NULL;
     ptr->tail = NULL;
     char cwd[PATH_MAX];
-    struct sigaction act;
     ignore_int();
     while (1)
     {
