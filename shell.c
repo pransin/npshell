@@ -134,6 +134,8 @@ void pop()
     if (ptr->head->next == NULL)
     {
         free(ptr->head);
+        ptr->head = NULL;
+        ptr->tail = NULL;
         return;
     }
     HistoryNode *hn = ptr->head;
