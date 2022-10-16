@@ -266,11 +266,11 @@ void free_pipeline(Pipeline *pipeline)
     {
         return;
     }
-    for (tmp = pipeline->cmd_list->next; tmp != NULL; tmp = tmp->next)
+    Command *next;
+    for (tmp = pipeline->cmd_list->next; tmp != NULL; tmp = next)
     {
-        free(tmp->input_file);
-        free(tmp->output_file);
         free(tmp->argv);
+        next = tmp->next;
         free(tmp);
     }
     pipeline->last = pipeline->cmd_list;
@@ -380,13 +380,9 @@ void execute(Pipeline *pipeline)
         }
     }
     Command *cmd = pipeline->cmd_list->next;
-    int pipe_index = -1;
+    int out_count = 0;
     for (int i = 0; i < count; i++)
     {
-        if (cmd->out_count > 0)
-        {
-            pipe_index++;
-        }
         pid_t ret = fork();
         if (ret == -1)
         {
@@ -544,14 +540,26 @@ void execute(Pipeline *pipeline)
                 close(pipe_fd[i][1]);
             }
             int status;
-            if (wait(&status) == -1)
-
+            if (out_count > 1)
             {
-                error_exit("wait");
+                int status;
+                waitpid(ret, &status, 0);
+                printf("-------- PID: %d status: %d --------\n", ret, status);
+                out_count--;
             }
-            printf("-------- Process[%d] pid: %d status: %d --------\n", i, ret, status);
+        }
+
+        if (cmd->out_count > 1)
+        {
+            out_count = cmd->out_count;
         }
         cmd = cmd->next;
+    }
+    int status;
+    pid_t pid;
+    while ((pid = wait(&status)) > 0)
+    {
+        printf("-------- PID: %d status: %d --------\n", pid, status);
     }
     close_all_pipes(pipe_fd, count - 1);
 }
@@ -575,8 +583,6 @@ Command *create_cmd()
     return cmd;
 }
 
-// TODO: test empty command name case
-// realloc argv;
 void parse_cmd(Command *cmd, char *token)
 {
     int argc = 0;
