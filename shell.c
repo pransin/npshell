@@ -2,6 +2,8 @@
 #define BUFFER_SIZE 1024
 #define MAX_CMD_SIZE 1024
 #define DEFAULT_MALLOC_SIZE 4
+#define HASH_TABLE_SIZE 517
+#define MAX_ALIAS_LEN 128
 #define GREEN "\033[0;32m"
 #define BOLD_GREEN "\033[1;32m"
 #define RESET "\033[0;37m"
@@ -66,7 +68,16 @@ typedef struct History
     HistoryNode *tail;
 } History;
 
+typedef struct HashEntry
+{
+    char alias[MAX_ALIAS_LEN];
+    char command_name[MAX_CMD_SIZE];
+    char command[MAX_CMD_SIZE];
+    bool present;
+} HashEntry;
+
 History *ptr = NULL;
+HashEntry hash_table[HASH_TABLE_SIZE];
 pid_t gpid; // To identify if the process is parent or child
 static sigjmp_buf senv;
 void int_handler(int signo)
@@ -95,6 +106,91 @@ void error_exit(char *msg)
 {
     perror(msg);
     exit(EXIT_FAILURE);
+}
+
+int calculate_hash(char *str)
+{
+    long long hash_value = 0;
+    int n = strlen(str);
+    const long long p = 31;
+    const long long PRIME = 1000000007;
+    long long prime_pow = 1;
+    for (int i = 0; i < n; i++)
+    {
+        hash_value = (hash_value + (str[i] * prime_pow) % PRIME) % PRIME;
+        prime_pow = (prime_pow * p) % PRIME;
+    }
+    return hash_value % HASH_TABLE_SIZE;
+}
+
+void init_table()
+{
+    for (int i = 0; i < HASH_TABLE_SIZE; i++)
+    {
+        hash_table[i].present = false;
+    }
+}
+
+void insert_table(char *alias, char *command_name, char *command)
+{
+    int len = strlen(alias);
+    for (int i = 0; i < len; i++)
+    {
+        if (alias[i] == '\n')
+        {
+            alias[i] = '\0';
+            break;
+        }
+    }
+    int hash_value = calculate_hash(alias);
+    int probe_no = 0;
+    while (hash_table[hash_value].present == true && strcmp(alias, hash_table[hash_value].alias) != 0 && probe_no < HASH_TABLE_SIZE)
+    {
+        hash_value = (hash_value + 1) % HASH_TABLE_SIZE;
+        probe_no++;
+    }
+    if (strcmp(hash_table[hash_value].alias, alias) == 0)
+    {
+        hash_table[hash_value].present = true;
+        strcpy(hash_table[hash_value].alias, alias);
+        strcpy(hash_table[hash_value].command_name, command_name);
+        strcpy(hash_table[hash_value].command, command);
+        return;
+    }
+    if (hash_table[hash_value].present == true)
+    {
+        perror("Hash Table full, cannot insert\n");
+        return;
+    }
+    hash_table[hash_value].present = true;
+    strcpy(hash_table[hash_value].alias, alias);
+    strcpy(hash_table[hash_value].command_name, command_name);
+    strcpy(hash_table[hash_value].command, command);
+}
+
+HashEntry *search_table(char *alias)
+{
+    int len = strlen(alias);
+    for (int i = 0; i < len; i++)
+    {
+        if (alias[i] == '\n')
+        {
+            alias[i] = '\0';
+            break;
+        }
+    }
+    int hash_value = calculate_hash(alias);
+    int probe_no = 0;
+    while (hash_table[hash_value].present == true && probe_no < HASH_TABLE_SIZE)
+    {
+        if (strcmp(hash_table[hash_value].alias, alias) == 0)
+        {
+            return &hash_table[hash_value];
+        }
+        hash_value = (hash_value + 1) % HASH_TABLE_SIZE;
+        probe_no++;
+    }
+    return NULL;
 }
 
 void insert_input_in_history(char *input)
@@ -170,11 +266,11 @@ void free_pipeline(Pipeline *pipeline)
     {
         return;
     }
-    Command *next;
-    for (tmp = pipeline->cmd_list->next; tmp != NULL; tmp = next)
+    for (tmp = pipeline->cmd_list->next; tmp != NULL; tmp = tmp->next)
     {
+        free(tmp->input_file);
+        free(tmp->output_file);
         free(tmp->argv);
-        next = tmp->next;
         free(tmp);
     }
     pipeline->last = pipeline->cmd_list;
@@ -225,6 +321,49 @@ void execute(Pipeline *pipeline)
             printf("%s", hn->input);
             hn = hn->next;
         }
+        return;
+    }
+    if (!strcmp(pipeline->cmd_list->next->argv[0], "alias"))
+    {
+        if (pipeline->cmd_list->next->argc < 4)
+        {
+            perror("Less arguments than expected");
+            return;
+        }
+        char alias[MAX_ALIAS_LEN];
+        char command_name[MAX_CMD_SIZE];
+        char command[MAX_CMD_SIZE];
+        int cmd_idx = 0;
+        int n = pipeline->cmd_list->next->argc;
+        strcpy(alias, pipeline->cmd_list->next->argv[1]);
+        strcpy(command_name, pipeline->cmd_list->next->argv[3]);
+        for (int i = 3; i < n; i++)
+        {
+            strcpy(cmd_idx + command, pipeline->cmd_list->next->argv[i]);
+            cmd_idx += strlen(pipeline->cmd_list->next->argv[i]);
+            if (i != n - 1)
+            {
+                command[cmd_idx++] = ' ';
+            }
+            else
+            {
+                command[cmd_idx] = '\0';
+            }
+        }
+        insert_table(alias, command_name, command);
+        return;
+    }
+    if (!strcmp(pipeline->cmd_list->next->argv[0], "unalias"))
+    {
+        char alias[MAX_ALIAS_LEN];
+        strcpy(alias, pipeline->cmd_list->next->argv[1]);
+        HashEntry *he = search_table(alias);
+        if (he == NULL)
+        {
+            perror("Alias not found");
+            return;
+        }
+        he->present = false;
         return;
     }
     if (!strcmp(pipeline->cmd_list->next->argv[0], "exit"))
@@ -404,14 +543,15 @@ void execute(Pipeline *pipeline)
             {
                 close(pipe_fd[i][1]);
             }
+            int status;
+            if (wait(&status) == -1)
+
+            {
+                error_exit("wait");
+            }
+            printf("-------- Process[%d] pid: %d status: %d --------\n", i, ret, status);
         }
         cmd = cmd->next;
-    }
-    int status;
-    pid_t pid;
-    while ((pid = wait(&status)) > 0)
-    {
-        printf("-------- PID: %d status: %d --------\n", pid, status);
     }
     close_all_pipes(pipe_fd, count - 1);
 }
@@ -640,6 +780,7 @@ int main()
     ptr->tail = NULL;
     char cwd[PATH_MAX];
     ignore_int();
+    init_table();
     while (1)
     {
         if (getcwd(cwd, PATH_MAX) != NULL)
@@ -648,6 +789,11 @@ int main()
         fflush(stdout);
         char *input = read_cmds();
         insert_input_in_history(input);
+        HashEntry *he = search_table(input);
+        if (he != NULL && he->present == true)
+        {
+            strcpy(input, he->command);
+        }
         Pipeline *pipeline = NULL;
 
         unignore_int();
