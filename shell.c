@@ -170,11 +170,11 @@ void free_pipeline(Pipeline *pipeline)
     {
         return;
     }
-    for (tmp = pipeline->cmd_list->next; tmp != NULL; tmp = tmp->next)
+    Command *next;
+    for (tmp = pipeline->cmd_list->next; tmp != NULL; tmp = next)
     {
-        free(tmp->input_file);
-        free(tmp->output_file);
         free(tmp->argv);
+        next = tmp->next;
         free(tmp);
     }
     pipeline->last = pipeline->cmd_list;
@@ -404,15 +404,14 @@ void execute(Pipeline *pipeline)
             {
                 close(pipe_fd[i][1]);
             }
-            int status;
-            if (wait(&status) == -1)
-
-            {
-                error_exit("wait");
-            }
-            printf("-------- Process[%d] pid: %d status: %d --------\n", i, ret, status);
         }
         cmd = cmd->next;
+    }
+    int status;
+    pid_t pid;
+    while ((pid = wait(&status)) > 0)
+    {
+        printf("-------- PID: %d status: %d --------\n", pid, status);
     }
     close_all_pipes(pipe_fd, count - 1);
 }
