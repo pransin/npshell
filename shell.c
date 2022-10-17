@@ -424,14 +424,34 @@ void execute(Pipeline *pipeline)
                     {
                         error_exit("pipe");
                     }
-                    if (write(temp_fd[1], data, position) == -1)
+
+                    int ret = fork();
+                    if (ret == 0)
                     {
-                        error_exit("write");
+                        close(temp_fd[0]);
+                        // close_all_pipes(pipe_fd, count - 1);
+                        if (write(temp_fd[1], data, position) == -1)
+                        {
+                            error_exit("write_duplicate1");
+                        }
+                        exit(EXIT_SUCCESS);
                     }
-                    if (write(pipe_fd[i][1], data, position) == -1)
+                    else
                     {
-                        error_exit("write");
+                        int ret = fork();
+                        if (ret == 0)
+                        {
+                            close(temp_fd[0]);
+                            close(temp_fd[1]);
+                            // close_all_pipes(pipe_fd, count - 1);
+                            if (write(pipe_fd[i][1], data, position) == -1)
+                            {
+                                error_exit("write_duplicate2");
+                            }
+                            exit(EXIT_SUCCESS);
+                        }
                     }
+
                     if (close(temp_fd[1]) == -1)
                     {
                         error_exit("close");
