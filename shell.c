@@ -798,9 +798,7 @@ Pipeline *create_pipeline(char *input)
     pipeline->last = pipeline->cmd_list;
     pipeline->last->next = NULL;
     bool is_alias = false;
-    char word[7] = "alias ";
-    word[6] = '\0';
-    if (strstr(input, word) != NULL)
+    if (strlen(input) > 5 && input[0] == 'a' && input[1] == 'l' && input[2] == 'i' && input[3] == 'a' && input[4] == 's')
     {
         is_alias = true;
     }
