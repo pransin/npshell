@@ -760,8 +760,16 @@ void insert_cmd(Pipeline *pipeline, Command *cmd)
     pipeline->cnt++;
 }
 
-void populate_pipeline(char *input, Pipeline *pipeline)
+void populate_pipeline(char *input, Pipeline *pipeline, bool is_alias)
 {
+    if (is_alias)
+    {
+        Command *cmd = create_cmd();
+        cmd->out_count = 0;
+        parse_cmd(cmd, input);
+        insert_cmd(pipeline, cmd);
+        return;
+    }
     int delim_count = 0;
     char *token = tokeniser(&input, &delim_count); // Split on pipe and comma
     while (token != NULL)
@@ -789,7 +797,14 @@ Pipeline *create_pipeline(char *input)
     }
     pipeline->last = pipeline->cmd_list;
     pipeline->last->next = NULL;
-    populate_pipeline(input, pipeline);
+    bool is_alias = false;
+    char word[7] = "alias ";
+    word[6] = '\0';
+    if (strstr(input, word) != NULL)
+    {
+        is_alias = true;
+    }
+    populate_pipeline(input, pipeline, is_alias);
     return pipeline;
 }
 
