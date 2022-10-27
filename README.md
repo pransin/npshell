@@ -77,6 +77,7 @@ For simplicity, following assumptions have been made
 - Maximum command size is 1024 characters
 - Maximum length of alias variable is 128 characters
 - For using alias command, each identifier in the command must be separated by a single space. Thus `alias L = ls -a` is valid but `alias L= ls -a` is not valid
+- For using grep command, the pattern must not be enclosed within "". Thus `ls -l | grep r` is valid but `ls -l | grep "r"` isn't valid
 
 ## Screenshots
 
