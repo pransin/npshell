@@ -125,7 +125,7 @@ For simplicity, following assumptions have been made
 ### History command
 ![History command](./screenshots/history_command.png?raw=true)
 
-### Command aliasng
+### Command aliasing
 ![Command aliasing](./screenshots/alias_and_unalias.png?raw=true)
 
 ### Changing directory and quitting shell
